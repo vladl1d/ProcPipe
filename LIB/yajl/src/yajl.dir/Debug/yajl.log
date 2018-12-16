@@ -1,0 +1,42 @@
+﻿  Building Custom Rule C:/Users/v-liderman/DataAdapter/LIB/yajl/src/CMakeLists.txt
+  CMake does not need to re-run because C:/Users/v-liderman/DataAdapter/LIB/yajl/src/CMakeFiles/generate.stamp is up-to-date.
+  yajl.c
+  yajl_lex.c
+  yajl_parser.c
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_parser.c(96): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\string.h(90): note:  см. объявление "strcat"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_parser.c(97): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\string.h(90): note:  см. объявление "strcat"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_parser.c(99): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\string.h(90): note:  см. объявление "strcat"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_parser.c(100): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\string.h(90): note:  см. объявление "strcat"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_parser.c(102): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\string.h(90): note:  см. объявление "strcat"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_parser.c(137): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\string.h(90): note:  см. объявление "strcat"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_parser.c(138): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\string.h(90): note:  см. объявление "strcat"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_parser.c(139): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\string.h(90): note:  см. объявление "strcat"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_parser.c(287): warning C4267: функция: преобразование из "size_t" в "unsigned int"; возможна потеря данных
+  yajl_buf.c
+  yajl_encode.c
+  yajl_gen.c
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_gen.c(213): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\stdio.h(1769): note:  см. объявление "sprintf"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_gen.c(222): warning C4005: isnan: изменение макроопределения
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\math.h(277): note: см. предыдущее определение "isnan"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_gen.c(223): warning C4005: isinf: изменение макроопределения
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\math.h(276): note: см. предыдущее определение "isinf"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_gen.c(233): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\stdio.h(1769): note:  см. объявление "sprintf"
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_gen.c(235): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  C:\Program Files (x86)\Windows Kits\10\Include\10.0.10586.0\ucrt\string.h(90): note:  см. объявление "strcat"
+  yajl_alloc.c
+  yajl_tree.c
+C:\Users\v-liderman\DataAdapter\LIB\yajl\src\yajl_tree.c(314): warning C4267: функция: преобразование из "size_t" в "unsigned int"; возможна потеря данных
+  yajl_version.c
+  Создание кода...
+  yajl.vcxproj -> C:\Users\v-liderman\DataAdapter\LIB\yajl\lib\Debug\yajl.dll
+  yajl.vcxproj -> C:/Users/v-liderman/DataAdapter/LIB/yajl/lib/Debug/yajl.pdb (Full PDB)

@@ -1,0 +1,6 @@
+C:/Users/v-liderman/DataAdapter/LIB/yajl/lib/yajl.dll
+C:/Users/v-liderman/DataAdapter/LIB/yajl/lib/yajl_s.lib
+C:/Users/v-liderman/DataAdapter/LIB/yajl/include/yajl/yajl_parse.h
+C:/Users/v-liderman/DataAdapter/LIB/yajl/include/yajl/yajl_gen.h
+C:/Users/v-liderman/DataAdapter/LIB/yajl/include/yajl/yajl_common.h
+C:/Users/v-liderman/DataAdapter/LIB/yajl/include/yajl/yajl_tree.h

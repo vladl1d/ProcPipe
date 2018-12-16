@@ -1,0 +1,65 @@
+The system is: Windows - 10.0.16299 - AMD64
+Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+Compiler: C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.15.26726/bin/Hostx86/x86/cl.exe 
+Build flags: 
+Id flags:  
+
+The output was:
+0
+Оптимизирующий компилятор Microsoft (R) C/C++ версии 19.15.26726 для x86
+(C) Корпорация Майкрософт (Microsoft Corporation).  Все права защищены.
+
+CMakeCCompilerId.c
+Microsoft (R) Incremental Linker Version 14.15.26726.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+/out:CMakeCCompilerId.exe 
+CMakeCCompilerId.obj 
+
+
+Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.exe"
+
+Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.obj"
+
+The C compiler identification is MSVC, found in "D:/Projects/test/yajl/build/CMakeFiles/3.13.0-rc2/CompilerIdC/CMakeCCompilerId.exe"
+
+Determining if the C compiler works passed with the following output:
+Change Dir: D:/Projects/test/yajl/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"nmake" "/nologo" "cmTC_0f4de\fast"
+	"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Tools\MSVC\14.15.26726\bin\HostX86\x86\nmake.exe" -f CMakeFiles\cmTC_0f4de.dir\build.make /nologo -L                  CMakeFiles\cmTC_0f4de.dir\build
+Building C object CMakeFiles/cmTC_0f4de.dir/testCCompiler.c.obj
+	C:\PROGRA~2\MIB055~1\2017\COMMUN~1\VC\Tools\MSVC\1415~1.267\bin\Hostx86\x86\cl.exe @C:\Users\D-SEBA~1\AppData\Local\Temp\nmF304.tmp
+testCCompiler.c
+Linking C executable cmTC_0f4de.exe
+	D:\Software\cmake\bin\cmake.exe -E vs_link_exe --intdir=CMakeFiles\cmTC_0f4de.dir --manifests  -- C:\PROGRA~2\MIB055~1\2017\COMMUN~1\VC\Tools\MSVC\1415~1.267\bin\Hostx86\x86\link.exe /nologo @CMakeFiles\cmTC_0f4de.dir\objects1.rsp @C:\Users\D-SEBA~1\AppData\Local\Temp\nmF4BB.tmp
+
+
+Detecting C compiler ABI info compiled with the following output:
+Change Dir: D:/Projects/test/yajl/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"nmake" "/nologo" "cmTC_0ee86\fast"
+	"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Tools\MSVC\14.15.26726\bin\HostX86\x86\nmake.exe" -f CMakeFiles\cmTC_0ee86.dir\build.make /nologo -L                  CMakeFiles\cmTC_0ee86.dir\build
+Building C object CMakeFiles/cmTC_0ee86.dir/CMakeCCompilerABI.c.obj
+	C:\PROGRA~2\MIB055~1\2017\COMMUN~1\VC\Tools\MSVC\1415~1.267\bin\Hostx86\x86\cl.exe @C:\Users\D-SEBA~1\AppData\Local\Temp\nmF844.tmp
+CMakeCCompilerABI.c
+Linking C executable cmTC_0ee86.exe
+	D:\Software\cmake\bin\cmake.exe -E vs_link_exe --intdir=CMakeFiles\cmTC_0ee86.dir --manifests  -- C:\PROGRA~2\MIB055~1\2017\COMMUN~1\VC\Tools\MSVC\1415~1.267\bin\Hostx86\x86\link.exe /nologo @CMakeFiles\cmTC_0ee86.dir\objects1.rsp @C:\Users\D-SEBA~1\AppData\Local\Temp\nmF8D2.tmp
+
+
+
+
+Detecting C [] compiler features compiled with the following output:
+Change Dir: D:/Projects/test/yajl/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"nmake" "/nologo" "cmTC_be819\fast"
+	"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Tools\MSVC\14.15.26726\bin\HostX86\x86\nmake.exe" -f CMakeFiles\cmTC_be819.dir\build.make /nologo -L                  CMakeFiles\cmTC_be819.dir\build
+Building C object CMakeFiles/cmTC_be819.dir/feature_tests.c.obj
+	C:\PROGRA~2\MIB055~1\2017\COMMUN~1\VC\Tools\MSVC\1415~1.267\bin\Hostx86\x86\cl.exe @C:\Users\D-SEBA~1\AppData\Local\Temp\nmFC3C.tmp
+feature_tests.c
+Linking C executable cmTC_be819.exe
+	D:\Software\cmake\bin\cmake.exe -E vs_link_exe --intdir=CMakeFiles\cmTC_be819.dir --manifests  -- C:\PROGRA~2\MIB055~1\2017\COMMUN~1\VC\Tools\MSVC\1415~1.267\bin\Hostx86\x86\link.exe /nologo @CMakeFiles\cmTC_be819.dir\objects1.rsp @C:\Users\D-SEBA~1\AppData\Local\Temp\nmFCC9.tmp
+
+
+    Feature record: C_FEATURE:1c_function_prototypes
+    Feature record: C_FEATURE:1c_variadic_macros
