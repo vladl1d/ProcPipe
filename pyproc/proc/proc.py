@@ -7,15 +7,12 @@ Created on Tue Nov 13 11:47:15 2018
 #from __future__ import with_statement#for python2.5
 #from __future__ import unicode_literals
 #from __future__ import print_function as _print
-import sys
-import os
 import threading
-__RUN_DIR__ = os.path.dirname(__file__)
-sys.path.append(__RUN_DIR__)
 from abc import ABC, abstractmethod
-from JsonStream import JsonTree, lc_dict
-from Util import get_typed_value
 from datetime import datetime
+from ..core.types import t_dict, t_list
+from ..util.util import get_typed_value
+from ..json.tree import JsonTree
 
 class ProcException(Exception):
     '''Исключение неполноты данных'''
@@ -36,16 +33,11 @@ class IProc(ABC):
     '''
     Абстрактный класс. Имплементация расчета
     '''
-    # режим обхода дерева. Ожидаем братских узлов с тем же PK или нет. Если да - кешируем
-    #контекст узла
-    use_node_cache = False
-
     #class methods
     #Схема документа
-    doc_schema = lc_dict()
+    doc_schema = t_dict()
     #схема строки документа
-    details_schema = lc_dict()
-    #__Details = '__Details'
+    details_schema = t_dict()
     # тег, под которым записывается в дерево контекст, если работаем с обычным json
     __Context = '__Context'
     #__Parent= '__Parent'
@@ -53,7 +45,7 @@ class IProc(ABC):
     _New_Node = True
 
     #contructors
-    def __init__(self, shell):
+    def __init__(self, shell, start_path=None):
         '''Базовый конструктор'''
         super().__init__()
         # дерево с исходными данными
@@ -68,7 +60,14 @@ class IProc(ABC):
         # кеш справочниов
         self.dict_cache = shell.dict_cache
         # список результатов расчета
-        self._details = JsonTree.t_list()
+        self._details = t_list()
+        #путь к узлу с данными в json
+        self.start_path = start_path if start_path else '.'
+        # режим обхода дерева. Ожидаем братских узлов с тем же PK или нет. Если да - кешируем
+        #контекст узла
+        self.use_node_cache = False
+        #схема данных, переданных в расчета
+        self.tree_schema = None
 
     ###################### Результат расчета
     @property
@@ -76,8 +75,7 @@ class IProc(ABC):
         '''Возвращает результат выполнения расчета'''
         if hasattr(self._shell, 'result') and self._shell.result is not None:
             return self._shell.result
-        else:
-            return self._details
+        return self._details
     @result.setter
     def result(self, value):
         if hasattr(self._shell, 'result') and self._shell.result is not None:
@@ -104,28 +102,29 @@ class IProc(ABC):
     def assert_requred(value, message):
         if not value:
             raise ProcException(message)
-    @staticmethod
-    def check_tree_node_type(tree_node, _type, msg=None):
+
+    def check_tree_node_type(self, tree_node, _type, msg=None):
+        '''Проверка типа узла для последующей обработки'''
         if not msg:
             entity = tree_node.key if hasattr(tree_node, 'key') else None
-            pk = IProc.get_entity_PK(tree_node)
+            pk = self.get_entity_PK(tree_node)
             msg = 'Неверный тип объекта %s[%s]' % (entity, pk)
-        IProc.assert_requred( isinstance(tree_node, _type) or \
+        self.assert_requred(isinstance(tree_node, _type) or \
                 isinstance(tree_node, JsonTree) and tree_node.type == _type and \
                     tree_node() != _type(), msg)
-    @staticmethod
-    def enter_subnode(tree_node, subnode_name):
+
+    def enter_subnode(self, tree_node, subnode_name):
         '''Входит в дочерний узел с проверкой'''
         #проверяем в то что в узел можно входить
-        IProc.check_tree_node_type(tree_node, JsonTree.t_dict)
+        self.check_tree_node_type(tree_node, t_dict)
         entity = tree_node.key if hasattr(tree_node, 'key') else None
-        pk = IProc.get_entity_PK(tree_node)
+        pk = self.get_entity_PK(tree_node)
         if not subnode_name in tree_node:
             raise ProcException('Не найден узел %s в %s[%s]' % (subnode_name, entity, pk))
         else:
             subnode = tree_node[subnode_name]
             err_msg = 'Пустой список потомков % s узла %s[%s]' % (subnode_name, entity, pk)
-            IProc.check_tree_node_type(subnode, JsonTree.t_list, err_msg)
+            self.check_tree_node_type(subnode, t_list, err_msg)
 #            if len(subnode) == 0:
 #                raise ProcException(err_msg)
             return tree_node[subnode_name]
@@ -133,8 +132,8 @@ class IProc(ABC):
     def _check_required(self, tree_node, required_type, keys=None, out_detail=None,\
                         assert_required=False):
         '''Проверяет набор на обязательные поля. Копирует типизированые значения в выходной набор'''
-        assert not out_detail or isinstance(out_detail, JsonTree.t_dict)
-        assert tree_node and isinstance(tree_node, (JsonTree, JsonTree.t_dict))
+        assert not out_detail or isinstance(out_detail, t_dict)
+        assert tree_node and isinstance(tree_node, (JsonTree, t_dict))
         if not keys:
             keys = tree_node.keys()
         for key in keys:
@@ -195,7 +194,7 @@ class IProc(ABC):
         ############### тело
         assert self.context, 'Не задан конекст выполнения операции'
         #проверяем поля. Заполняем запись
-        node_detail = JsonTree.t_dict()
+        node_detail = t_dict()
         if key_d0:
             keys += [('D_Date0', key_d0)]
         if key_d1:
@@ -232,9 +231,9 @@ class IProc(ABC):
         if self.context.get('context_cache', None) is None:
             self.context['context_cache'] = dict()
         #Оригинальные родительские строки
-        self.context['parent_details'] = JsonTree.t_list()
+        self.context['parent_details'] = t_list()
         #Строки после пересечения с текущим уровнем
-        self.context['node_details'] = JsonTree.t_list()
+        self.context['node_details'] = t_list()
         #Родитель. Нужно для восстановления контекста при выходе из узла
         self.context['parent'] = None
         #Текущий узел. Нужно для восстановления контекста при выходе из узла
@@ -245,12 +244,20 @@ class IProc(ABC):
         #Контекст проинициализирован
         self.context['_initialized'] = True
 
-    @staticmethod
-    def get_entity_PK(tree_node, key=None):
+    def get_entity_PK(self, tree_node, key=None):
         '''Получение первичного ключа записи'''
-        #TODO: сделать нормальный обработчик с учетом схемы!!!!
-        assert isinstance(tree_node, (JsonTree.t_dict, JsonTree)), 'Неверный тип записи'
-        key = key if key else 'LINK'
+        #Обработка с учетом схемы
+        assert isinstance(tree_node, (t_dict, JsonTree)), 'Неверный тип записи'
+        if not key:
+            if  isinstance(tree_node, JsonTree) and self.tree_schema is not None:
+                path = tree_node.path
+                path = '.' + (path.join('/') if path else '')
+                entity = self.tree_schema.query(path)
+                if entity and entity.PK:
+                    key = entity.PK[0]
+            else:
+                key = 'LINK'
+
         pk = tree_node.get(key, None)
         if isinstance(tree_node, JsonTree) and tree_node.key:
             key = tree_node.key
@@ -274,7 +281,7 @@ class IProc(ABC):
         ''' Начало нового уровня по иерархии данных. Аналог start_map
         common - братья разделяют общий контекст родителя
         key - название PK сущности'''
-        assert isinstance(self.context, JsonTree.t_dict)
+        assert isinstance(self.context, t_dict)
         # каждый узел хранит свою копию контекста. Копируются только ключи справочника
         self.context = self.context.copy()
         if not self.context.get('_initialized', False):
@@ -307,7 +314,7 @@ class IProc(ABC):
             #конекст вышестоящего узла становится узлом родителя
             self.context['parent_details'] = self.context['node_details']
             #Строки после пересечения с текущим уровнем
-            self.context['node_details'] = JsonTree.t_list()
+            self.context['node_details'] = t_list()
             # ключ
             if key:
                 self.context['key'][id(tree_node)] = key
@@ -321,7 +328,7 @@ class IProc(ABC):
 
     def leave_child_context(self, tree_node):
         ''' Конец уровня по иерархии данных. Возврат наверх. Аналог end_map'''
-        assert isinstance(self.context, JsonTree.t_dict)
+        assert isinstance(self.context, t_dict)
         if not self.context.get('_initialized', False):
             self.init_context()
         #получаем поле с ключом
@@ -329,7 +336,7 @@ class IProc(ABC):
         # рассчитываем на передачу по ссылке
         # Если дерево не иерархия - я структурированная плоская таблица, используем кеш
         if self.use_node_cache:
-            self.context = self.save_context(tree_node, key=key)
+            self.context = self.restore_context(tree_node, key=key)
         else:
             if isinstance(tree_node, JsonTree):
                 self.context = tree_node.context
@@ -342,7 +349,7 @@ class IProc(ABC):
         else:
             #Что мы наделали в узел кладем родителю
             self.context['parent_details'] = self.context['node_details']
-            self.context['node_details'] = JsonTree.t_list()
+            self.context['node_details'] = t_list()
 
         # освободим память
         tree_node.context = None
@@ -350,7 +357,7 @@ class IProc(ABC):
 
     ###################### Helpers методов расчета
     def _prepare_check_time_intervals(self, detail):
-        assert isinstance(detail, JsonTree.t_dict)
+        assert isinstance(detail, t_dict)
         #разница во времени
         date0, date1 = detail['D_Date0'], detail['D_Date1']
         t_delta = date1 - date0
@@ -399,7 +406,7 @@ class IProc(ABC):
         #Тарификация
         precision = detail['N_Precision']
         tariff = detail['N_Tariff']
-        amount = (round((cons * days / days0), precision) * tariff, 2)
+        amount = round(round((cons * days / days0), precision) * tariff, 2)
         tax = detail['N_Tax']
         tax_amount = 0
         if detail['B_Tax_Inside']:
@@ -421,7 +428,7 @@ class IProc(ABC):
     def _cb_complete(self, tree_node):
         '''Конец расчета'''
         pass
-    
+
     def _cb_error(self, tree_node, error):
         '''ошибка в гланом обработчике'''
         self.log_tree_node_error('Ошибка в главном обработчике', tree_node=tree_node, error=error)
@@ -596,7 +603,9 @@ class IProc(ABC):
     def _get_root_node(self, tree_node):
         '''Получение корневого узла для обработки'''
         assert  isinstance(tree_node, (dict, list, JsonTree)), 'Неверный тип объекта'
-        if isinstance(tree_node, JsonTree) and tree_node.type == JsonTree.t_list:
+        if self.start_path:
+            tree_node = tree_node.query(self.start_path)
+        if isinstance(tree_node, JsonTree) and tree_node.type == t_list:
             return tree_node[0]
         if isinstance(tree_node, list):
             return tree_node[0]
@@ -649,11 +658,18 @@ class IProc(ABC):
         '''Получить функцию метод расчета УП'''
         return lambda *arg: None
     ####################### Тело обобщенного расчета
-    def run(self, tree_node, context):
+    def run(self, tree_node, context, schema=None, hold_node=None):
         '''Запуск расчета. Передается узел для обработки, параметры'''
+        #дерево для обработки
         self.tree = tree_node
+        #переменные текущего контекста
         self.context = context
+        #id потока в котором обрабатывается расчета
         self.worker_id = threading.current_thread().ident
+        #схема данных, переданных в расчета
+        self.tree_schema = schema
+        #узел для хранения узла по подписке (чтобы не грохнул сборщик мусора в многопоточном режиме)
+        self.hold_node = hold_node
         try:
             # получение верхнего узла расчета
             tree_node = self._get_root_node(tree_node)
@@ -666,6 +682,12 @@ class IProc(ABC):
         except Exception as error:
             self._cb_error(tree_node, error)
         finally:
+            self.tree = None
+            self.context = None
+            self.worker_id = None
+            self.tree_schema = None
+            self.hold_node = None
+        
             return self.result
 
     def _proc_main(self, tree_node):

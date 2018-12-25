@@ -31,7 +31,7 @@ class PollError(Exception):
     """
     pass
 # ==============================================================================
-class Poll(object):
+class Poller():
     """Keep a poll of Master objects for processing with different threads.
 
     Each poll manage a set of threads, able to do parallel processing, and a
@@ -80,7 +80,7 @@ class Poll(object):
         #Счетчик ошибок в транзакции
         self.success = threading.Event()
         self.success.set()
-        
+
         self.verbose = verbose
 
     def _build_objects(self, object_count):
@@ -149,10 +149,10 @@ class Poll(object):
         # Remove refs to threads.
         if hasattr(self, '_workers'):
             # Wait for threads to be finished.
-            for th in self._workers:
+            for thread in self._workers:
                 #if DEBUG_MULTITHREAD:
                 #    logger.debug("Signaling to thread %s (%d)", th.name, id(th))
-                th.join()
+                thread.join()
 
             del self._workers
         # Remove references to master objects.
@@ -167,7 +167,7 @@ class Poll(object):
         self.stop_poll()
 
 
-class Job(object):
+class Job():
     """Задание для асинхронного выполнения
     """
     def __init__(self, poll, methname, kwargs, callback):
@@ -195,12 +195,12 @@ class Job(object):
         try:
             meth = getattr(obj, self._methname)
             self._result = meth(**self._kwargs)
-        except Exception as e:
+        except Exception as error:
             #if DEBUG_MULTITHREAD:
             self._poll.success.clear()
             self._poll.logger.exception("%s::Задание %d закончилось исключением", \
                                        type(self._poll).__name__, id(self))
-            self._result = e
+            self._result = error
         # Освобождаем мастер-объект.
         #if DEBUG_MULTITHREAD:
         #    logger.debug("Job %d give back tagger %d", id(self),

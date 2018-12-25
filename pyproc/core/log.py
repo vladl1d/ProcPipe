@@ -17,4 +17,3 @@ class ShellLogHandler(logging.Handler):
         '''Стандартный обработчик записи'''
         assert callable(self._log_func)
         self._log_func(record, **self.kwargs)
-

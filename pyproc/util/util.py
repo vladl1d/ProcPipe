@@ -129,7 +129,7 @@ def get_typed_value(value, _type):
     elif _type == float:
         return float(value)
     elif _type == bool:
-        return value==True
+        return value == True
     elif _type == UUID:
         return UUID(value)
     elif _type == datetime:
