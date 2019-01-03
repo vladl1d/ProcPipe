@@ -1,5 +1,0 @@
-C:/Users/v-liderman/DataAdapter/LIB/yajl/src/CMakeFiles/yajl_s.dir
-C:/Users/v-liderman/DataAdapter/LIB/yajl/src/CMakeFiles/yajl.dir
-C:/Users/v-liderman/DataAdapter/LIB/yajl/src/CMakeFiles/INSTALL.dir
-C:/Users/v-liderman/DataAdapter/LIB/yajl/src/CMakeFiles/ALL_BUILD.dir
-C:/Users/v-liderman/DataAdapter/LIB/yajl/src/CMakeFiles/ZERO_CHECK.dir

@@ -34,10 +34,7 @@
                     "filter": "@.D_Date_Begin<@D_Date1 AND (@.D_Date_End>@D_Date0 OR @.D_Date_End IS NULL) AND @.B_Receivable=1 AND @.B_EE=0 AND @.F_Conn_Points=@parent.F_Conn_Points",
 
                     "ED_Registr_Pts": {
-                        "cols": [
-                            { "F_Sale_Items": ["LINK", "C_Const", "F_Units", "N_Precision", "N_Precision2"] },
-                "F_Energy_Levels", "F_Network_Pts", "F_Sale_Category", "D_Date_Begin", "D_Date_End"
-                        ],
+                        "cols": ["F_Sale_Items", "F_Energy_Levels", "F_Network_Pts", "F_Sale_Category", "D_Date_Begin", "D_Date_End"],
                         "filter": "@.D_Date_Begin<@D_Date1 AND (@.D_Date_End>@D_Date0 OR @.D_Date_End IS NULL)",
 
                         "ED_Registr_Pts_Calc_Methods": {
@@ -48,7 +45,7 @@
                         "ED_Registr_Pts_Tariff": {
                             "cols": [
                                 "D_Date", "D_Date_End",
-                                { "F_Tariff": ["LINK", "F_Energy_Levels", "F_Units", "F_Units_2", "F_Sale_Accounts_1", "F_Sale_Accounts_2", "F_Taxes"] }
+                                { "F_Tariff": {["LINK", "F_Energy_Levels", "F_Units", "F_Units_2", "F_Sale_Accounts_1", "F_Sale_Accounts_2", "F_Taxes"] }
                             ],
                             "filter": "@.D_Date<@D_Date1 AND @.D_Date_End>@D_Date0"
                         },

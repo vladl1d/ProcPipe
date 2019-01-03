@@ -77,15 +77,9 @@ class ProcResult(Poller):
     def __str__(self):
         return str(self())
     def _async_append(self, new):
-        #Создаем критическую секцию to be threadsafe by all means
-        with self._lock:
-#            self._lock.acquire(True)
-#            self.logger.info('Push result^ %d', self.result_count)
-            # превращаем в текст кастомные типы
-            self._result.append(new)
-            #self._append2pd_dataframe(new)
-            self._check_batch()
-#            self._lock.release()
+        self._result.append(new)
+        #self._append2pd_dataframe(new)
+        self._check_batch()
     def append(self, new):
         '''Добавление новой строки к результату'''
         self.create_job('_async_append', callback=None, new=new)
@@ -93,26 +87,24 @@ class ProcResult(Poller):
         '''Проверка наполнения batch'''
         if self._batch_size > 0 and self.result_count > self._batch_size:
             self._flush()
-    def _flush(self, outside=False):
+    def _flush(self, outside=True):
         '''Сбрасывает результаты расчета на СУБД'''
-        if not self._flush_func:
+        if not self._flush_func or not callable(self._flush_func) or not self.result_count:
             return
-        assert callable(self._flush_func)
-        #вставляем результаты в БД в критической секции
-        if self.result_count:
-            if outside:
-                self._lock.acquire(True)
-#            self.logger.info('Сброс результатов: %d', len(self._result))
-            #получаем json для отправки
-            js_data = json.dumps(self._result, cls=CustomEncoder)
-            #отправка
-            if not self._flush_func(js_data, **self._kwargs):
-                self.success.clear()
+        #вставляем результаты в БД в критической секции. Блокируем только на время получения данных
+        # для отправки
+        with self._lock:
+            results = self._result
             #сбрасываем результаты для исключения повторной отправки
-            self._result.clear()
-            if outside:
-                self._lock.release()
+            self._result = []
+            
+        #получаем json для отправки
+        js_data = json.dumps(results, cls=CustomEncoder)
+        #отправка
+        if not self._flush_func(js_data, **self._kwargs):
+            self.success.clear()
+            
 
     def flush(self):
         '''Сбрасывает результаты расчета на СУБД'''
-        self._flush(False)
+        self._flush(True)

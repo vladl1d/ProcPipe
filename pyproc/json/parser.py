@@ -7,8 +7,8 @@ Created on Mon Oct 29 15:52:11 2018
 """
 #import sys
 import encodings
-from collections import deque
-from ..core.types import t_dict, t_list
+#from collections import deque
+#from ..core.types import t_dict, t_list
 from .tree import JsonTree
 
 from yajl import (
@@ -29,7 +29,7 @@ class JsonParser(YajlContentHandler):
         self.root = None
         #текуший узел, по которому идет парсинг
         self.current = None
-        self.path = deque()
+        self.path = None
         #обработчки по подписке
         self.callbacks = callbacks
         self.kwargs = None
@@ -42,7 +42,7 @@ class JsonParser(YajlContentHandler):
         #словарь с деревом запроса для определения PK
         self.schema = None
         # кеш схемф (путь->сущность)
-        self.schema_map = t_dict()
+        self.schema_map = dict()
         self.encode = encodings.search_function(encoding).encode
         self.decode = encodings.search_function(encoding).decode
         
@@ -81,14 +81,14 @@ class JsonParser(YajlContentHandler):
                 self.current = JsonTree()
                 if self.root is None:
                     self.root = self.current
-        if isinstance(self.current(), t_dict):
+        if self.current.type == JsonTree.t_dict:
             if self.current.key is None:
                 #Если не задан ключ - объединяем структуры. Сделано для объединения
                 #последовательности json в 1 большой
-                if isinstance(value, JsonTree) and value.type == t_dict:
+                if isinstance(value, JsonTree) and value.type == JsonTree.t_dict:
                     self.current().update(value())
                     return
-                if isinstance(value, t_dict):
+                if isinstance(value, JsonTree.t_dict):
                     self.current().update(value)
                     return
                 else:
@@ -96,7 +96,7 @@ class JsonParser(YajlContentHandler):
 
             self.current[self.current.key] = value
             self.current.key = None
-        elif isinstance(self.current(), t_list):
+        elif self.current.type == JsonTree.t_list:
             self.current().append(value)
         else:
             self.current.value = value
@@ -104,20 +104,19 @@ class JsonParser(YajlContentHandler):
     def _callback_trigger(self, path, node):
         '''Вызов событий по подписке'''
         if self.callbacks:
-            for trigger in self.callbacks.keys():
-                _callback = self.callbacks[trigger]
-                if isinstance(trigger, (list, tuple)):
-                    trigger = '/'.join(trigger)
-                else:
-                    trigger = str(trigger)
-                if isinstance(path, list):
-                    path = '/'.join(path)
+            for trigger in self.callbacks:
+#                if isinstance(trigger, (list, tuple)):
+#                    trigger = '/'.join(trigger)
+#                else:
+#                    trigger = str(trigger)
+#                if isinstance(path, list):
+#                    path = '/'.join(path)
 
                 _cmp = lambda x, y: x == y if y[:2] == './' else x.endswith(y)
                 if _cmp(path.lower(), trigger.lower()):
                     #Верни True - если успешно обработал узел и мы его грохнем из обработки
                     #Иначе верни False
-                    return _callback(node, self, **self.kwargs)
+                    return self.callbacks[trigger](node, self, **self.kwargs)
 
         return False
 
@@ -126,7 +125,7 @@ class JsonParser(YajlContentHandler):
         '''Обработка события начала разбора'''
 #        self.root = None #JsonTree()
 #        self.current = None #self.root
-        self.path = ['.']
+        self.path = '.'
     def parse_buf(self):
         '''Обработка события окончания обработки буфера'''
         pass
@@ -157,16 +156,16 @@ class JsonParser(YajlContentHandler):
         '''Обработка события начала структуры'''
         # обработка пути
         if self.current is not None and self.current.key:
-            self.path.append(self.current.key)
+            self.path += '/' + self.current.key
 
-        self._push(t_dict())
+        self._push(JsonTree.t_dict())
     def _map_2key(self, key):
         if self.alias_map:
             val = self.alias_map.get(key, key)
             val = val.name.replace('.', '_') if hasattr(val, 'name') else str(val)
         else:
             val = key
-        return val
+        return val.lower()
     def yajl_map_key(self, ctx, stringVal):
         '''Обработка события ключ структуры'''
         self.current.key = self._map_2key(self.decode(stringVal)[0])
@@ -178,9 +177,10 @@ class JsonParser(YajlContentHandler):
             value.key = self.current.key
 
         #обработка пути
-        path = self.path.copy()
+        path = self.path
         if self.path:
-            self.path.pop()
+            pos = self.path.rfind('/')
+            self.path = self.path[:pos] if pos>0 else '.'
         #триггер
         if self._callback_trigger(path, value):
             value = None
@@ -194,13 +194,13 @@ class JsonParser(YajlContentHandler):
         #Подставляем здесь ключ (PK) для индексирования
         pk = None
         if self.schema and key:
-            path = ('/'.join(self.path + [key])).lower() if self.path else ''
+            path = (self.path + '/' + key).lower() if self.path else ''
             entity = self.schema_map.get(path, None)
             if not entity:
                 self.schema_map[path] = entity = self.schema.query(path, None)
             pk = entity.PK[0] if getattr(entity, 'indexed', False) else None
 
-        self._push(t_list(pk=pk), key=key)
+        self._push(JsonTree.t_list(pk=pk), key=key)
     def yajl_end_array(self, ctx):
         '''Обработка события окончания массива'''
         if self.current.key:
@@ -220,10 +220,10 @@ class JsonParser(YajlContentHandler):
         while parent is not None:
             # обработка. Не портим списки, в словари засовываем ссылки на фейковые массивы.
             # их все равно перезапишут
-            if isinstance(parent(), t_list):
-                parent = JsonTree(t_list(parent().pk), parent.key, parent.parent)
+            if parent.type == JsonTree.t_list:
+                parent = JsonTree(JsonTree.t_list(parent().pk), parent.key, parent.parent)
                 parent().append(current)
-            if isinstance(parent(), t_dict) and parent.key:
+            if parent.type == JsonTree.t_dict and parent.key:
                 parent[parent.key] = current
             current = parent
             parent = current.parent

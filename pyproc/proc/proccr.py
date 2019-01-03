@@ -6,8 +6,10 @@ Created on Wed Nov 14 17:16:24 2018
 """
 from uuid import UUID
 from datetime import datetime
-from ..core.types import t_dict, t_list
-from .proc import IProc, ProcException, _null, _not_null, _calc
+#from ..core.types import t_dict, t_list
+from .proc import IProc
+from .types import _null, _not_null, _calc
+from .util import get_record_by_key
 
 class ProcCR(IProc):
     '''
@@ -15,9 +17,9 @@ class ProcCR(IProc):
     '''
     #class methods
     #Схема документа
-    doc_schema = t_dict()
+    doc_schema = dict()
     #схема строки документа
-    details_schema = t_dict({
+    details_schema = dict({
         'session':           _not_null((int,)),
         'f_division':        _not_null((int,)),
         'f_subscr':          _not_null((int,)),
@@ -57,9 +59,9 @@ class ProcCR(IProc):
         })
 
     #constructors
-    def __init__(self, shell, start_path):
+    def __init__(self, shell, use_node_cache=False):
         '''Базовый конструктор. Дополнительно передаем куда результат вставить'''
-        super().__init__(shell, start_path)
+        super().__init__(shell, use_node_cache)
         #иницализация объекта с результатом расчета
         self.__init_result(shell)
 
@@ -72,8 +74,12 @@ class ProcCR(IProc):
     # Шапка расчета
     def _cb_init(self, tree_node):
         '''Запуск расчета'''
-        if self.enter_child_context(tree_node, key='F_Division') == self._New_Node:
-            self._init_details([('F_Division', 'LINK')], None, None, tree_node)
+        # проверка кеша
+        assert isinstance(self.dict_cache, dict) and 'fs_sale_items' in self.dict_cache, \
+                'Кеш не проинициализирован'
+        #вход в корневой узел
+        if self.context.enter_child_context(tree_node, key='sd_division') == self.context.NEW:
+            self._init_details([('f_division', 'link')], None, None, tree_node)
 
     def _cb_complete(self, tree_node):
         '''Конец расчета'''
@@ -86,62 +92,64 @@ class ProcCR(IProc):
 
     def _cb_conn_point_before(self, tree_node):
         '''Перед началом обработки объекта'''
-        if self.enter_child_context(tree_node) == self._New_Node:
-            self._init_details([('F_Conn_Points', 'LINK')], None, None, tree_node)
+        if self.context.enter_child_context(tree_node) == self.context.NEW:
+            self._init_details([('f_conn_points', 'link')], None, None, tree_node)
 
     def _cb_contract_squares_before(self, tree_node):
         '''Перед началом обработки площади'''
-        if self.enter_child_context(tree_node, common=True) == self._New_Node:
-            self._init_details(['N_Square', 'F_Prop_Forms'], 'D_Date', 'D_Date_End',
+        if self.context.enter_child_context(tree_node, common=True) == self.context.NEW:
+            self._init_details(['n_square', 'f_prop_forms'], 'd_date', 'd_date_end',
                                tree_node)
 
 
     def _cb_conn_point_sub_before(self, tree_node):
         '''Перед началом обработки помещения объекта'''
-        if self.enter_child_context(tree_node) == self._New_Node:
-            self._init_details([('F_Conn_Points_Sub', 'LINK')], None, None, tree_node)
+        if self.context.enter_child_context(tree_node) == self.context.NEW:
+            self._init_details([('f_conn_points_sub', 'link')], None, None, tree_node)
 
 
     def _cb_subscr_before(self, tree_node):
         '''Перед началом обработки ЛС'''
-        if self.enter_child_context(tree_node) == self._New_Node:
-            self._init_details([('F_Subscr', 'LINK')], 'D_Date_Begin', 'D_Date_End',
+        if self.context.enter_child_context(tree_node) == self.context.NEW:
+            self._init_details([('f_subscr', 'link')], 'd_date_begin', 'd_date_end',
                                tree_node)
 
     def _cb_registr_pts_before(self, tree_node):
         '''Перед началом обработки УП'''
-        if self.enter_child_context(tree_node) == self._New_Node:
-            self._init_details([('F_Registr_Pts', 'LINK'), 'F_Network_Pts', 'F_Sale_Items',
-                                'F_Balance_Types', 'F_Energy_Levels'],
-                                'D_Date_Begin', 'D_Date_End', tree_node)
-        sub_node = self.enter_subnode(tree_node, 'FS_Sale_Items')
-        if sub_node.type == t_list:
-            sub_node = sub_node[0]
-        if self.enter_child_context(sub_node, common=True) == self._New_Node:
-            self._init_details(['F_Units', 'N_Precision', ('C_Sale_Items', 'C_Const')],
+        if self.context.enter_child_context(tree_node) == self.context.NEW:
+            self._init_details([('f_registr_pts', 'link'), 'f_network_pts', 'f_sale_items',
+                                'f_balance_types', 'f_energy_levels'],
+                                'd_date_begin', 'd_date_end', tree_node)
+        sub_node = get_record_by_key(self.dict_cache['fs_sale_items'], 'link', \
+                                     tree_node['f_sale_items'])
+#        sub_node = self.context.enter_subnode(tree_node, 'fs_sale_items')
+#        if isinstance(sub_node, list):
+#            sub_node = sub_node[0]
+        if self.context.enter_child_context(sub_node, common=True) == self.context.NEW:
+            self._init_details(['f_units', 'n_precision', ('c_sale_items', 'c_const')],
                                None, None, sub_node)
-        self.leave_child_context(sub_node)
+        self.context.leave_child_context(sub_node)
 
     def _cb_registr_pts_activity_before(self, tree_node):
         '''Перед началом обработки активности УП'''
-        if self.enter_child_context(tree_node, common=True) == self._New_Node:
-            self._init_details([(('N_Percent', 'N_Rate'))], 'D_Date', 'D_Date_End', tree_node)
+        if self.context.enter_child_context(tree_node, common=True) == self.context.NEW:
+            self._init_details([(('n_percent', 'n_rate'))], 'd_date', 'd_date_end', tree_node)
 
     def _cb_registr_pts_tariff_before(self, tree_node):
         '''Перед началом обработки тарифа УП'''
-        if self.enter_child_context(tree_node, common=True) == self._New_Node:
-            self._init_details(['F_Tariff'], 'D_Date', 'D_Date_End', tree_node)
-        sub_node = self.enter_subnode(tree_node, 'FS_Tariff')
-        if sub_node.type == t_list:
+        if self.context.enter_child_context(tree_node, common=True) == self.context.NEW:
+            self._init_details(['f_tariff'], 'd_date', 'd_date_end', tree_node)
+        sub_node = self.context.enter_subnode(tree_node, 'fs_tariff')
+        if isinstance(sub_node, list):
             sub_node = sub_node[0]
-        if self.enter_child_context(sub_node, common=True) == self._New_Node:
-            self._init_details(['F_Units', 'F_Taxes', 'F_Sale_Accounts_1'], None, None, sub_node)
-        self.leave_child_context(sub_node)
+        if self.context.enter_child_context(sub_node, common=True) == self.context.NEW:
+            self._init_details(['f_units', 'f_taxes', 'f_sale_accounts_1'], None, None, sub_node)
+        self.context.leave_child_context(sub_node)
 
     def _cb_calc_method_before(self, tree_node):
         '''Перед началом обработки УП выбранным методом расчета'''
-        if self.enter_child_context(tree_node, common=True) == self._New_Node:
-            self._init_details(['F_Calc_Methods'], 'D_Date', 'D_Date_End', tree_node)
+        if self.context.enter_child_context(tree_node, common=True) == self.context.NEW:
+            self._init_details(['f_calc_methods'], 'd_date', 'd_date_end', tree_node)
 
     # Только 1 метод расчета
     def _get_calc_method(self, detail):
@@ -150,13 +158,13 @@ class ProcCR(IProc):
 
     def _calc_square(self, detail):
         '''Расчет по площади'''
-        assert detail and isinstance(detail, t_dict)
-        self._check_required(detail, tuple, keys=['N_Square', 'N_Percent'])
-        square = detail['N_Square']
-        percent = detail['N_Percent']
-        precision = detail.get('N_Precision', 0)
+        assert detail and isinstance(detail, dict)
+        self._check_required(detail, tuple, keys=['n_square', 'n_percent'])
+        square = detail['n_square']
+        percent = detail['n_percent']
+        precision = detail.get('n_precision', 0)
 
-        detail['N_Cons'] = round(square * percent, precision)
+        detail['n_cons'] = round(square * percent, precision)
 
     # обобщенный расчет
     def _proc_conn_point(self, tree_node):
@@ -170,7 +178,7 @@ class ProcCR(IProc):
                 self._proc_conn_point_sub(node)
                 #событие выход
                 self._cb_conn_point_sub_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_conn_point_sub_error(node, error)
 
     def _proc_registr_pts_activity(self, tree_node):

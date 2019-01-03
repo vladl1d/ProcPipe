@@ -10,24 +10,10 @@ Created on Tue Nov 13 11:47:15 2018
 import threading
 from abc import ABC, abstractmethod
 from datetime import datetime
-from ..core.types import t_dict, t_list
+#from ..core.types import t_dict, t_list
 from ..util.util import get_typed_value
-from ..json.tree import JsonTree
-
-class ProcException(Exception):
-    '''Исключение неполноты данных'''
-    pass
-
-#Классы для схемы данных
-class _not_null(tuple):
-    '''Клас обозначающий не пустое поле'''
-    pass
-class _null(tuple):
-    '''Клас обозначающий пустое поле'''
-    pass
-class _calc(tuple):
-    '''Клас обозначающий результат расчета'''
-    pass
+from .context import Context
+from .types import ProcException, _not_null, _calc
 
 class IProc(ABC):
     '''
@@ -35,17 +21,12 @@ class IProc(ABC):
     '''
     #class methods
     #Схема документа
-    doc_schema = t_dict()
+    doc_schema = dict()
     #схема строки документа
-    details_schema = t_dict()
-    # тег, под которым записывается в дерево контекст, если работаем с обычным json
-    __Context = '__Context'
-    #__Parent= '__Parent'
-    # При загрузке контекста обнаружили новый узел, которого нет в кеше
-    _New_Node = True
+    details_schema = dict()
 
     #contructors
-    def __init__(self, shell, start_path=None):
+    def __init__(self, shell, use_node_cache=False):
         '''Базовый конструктор'''
         super().__init__()
         # дерево с исходными данными
@@ -60,14 +41,10 @@ class IProc(ABC):
         # кеш справочниов
         self.dict_cache = shell.dict_cache
         # список результатов расчета
-        self._details = t_list()
-        #путь к узлу с данными в json
-        self.start_path = start_path if start_path else '.'
+        self._details = list()
         # режим обхода дерева. Ожидаем братских узлов с тем же PK или нет. Если да - кешируем
         #контекст узла
-        self.use_node_cache = False
-        #схема данных, переданных в расчета
-        self.tree_schema = None
+        self.use_node_cache = use_node_cache
 
     ###################### Результат расчета
     @property
@@ -98,42 +75,13 @@ class IProc(ABC):
             self.log.warning(msg, *arg, exc_info=error)
         #print(msg)
 
-    @staticmethod
-    def assert_requred(value, message):
-        if not value:
-            raise ProcException(message)
 
-    def check_tree_node_type(self, tree_node, _type, msg=None):
-        '''Проверка типа узла для последующей обработки'''
-        if not msg:
-            entity = tree_node.key if hasattr(tree_node, 'key') else None
-            pk = self.get_entity_PK(tree_node)
-            msg = 'Неверный тип объекта %s[%s]' % (entity, pk)
-        self.assert_requred(isinstance(tree_node, _type) or \
-                isinstance(tree_node, JsonTree) and tree_node.type == _type and \
-                    tree_node() != _type(), msg)
-
-    def enter_subnode(self, tree_node, subnode_name):
-        '''Входит в дочерний узел с проверкой'''
-        #проверяем в то что в узел можно входить
-        self.check_tree_node_type(tree_node, t_dict)
-        entity = tree_node.key if hasattr(tree_node, 'key') else None
-        pk = self.get_entity_PK(tree_node)
-        if not subnode_name in tree_node:
-            raise ProcException('Не найден узел %s в %s[%s]' % (subnode_name, entity, pk))
-        else:
-            subnode = tree_node[subnode_name]
-            err_msg = 'Пустой список потомков % s узла %s[%s]' % (subnode_name, entity, pk)
-            self.check_tree_node_type(subnode, t_list, err_msg)
-#            if len(subnode) == 0:
-#                raise ProcException(err_msg)
-            return tree_node[subnode_name]
 
     def _check_required(self, tree_node, required_type, keys=None, out_detail=None,\
                         assert_required=False):
         '''Проверяет набор на обязательные поля. Копирует типизированые значения в выходной набор'''
-        assert not out_detail or isinstance(out_detail, t_dict)
-        assert tree_node and isinstance(tree_node, (JsonTree, t_dict))
+        assert not out_detail or isinstance(out_detail, dict)
+        assert isinstance(tree_node, dict)
         if not keys:
             keys = tree_node.keys()
         for key in keys:
@@ -143,7 +91,7 @@ class IProc(ABC):
             else:
                 db_key = key
             assert key in self.details_schema, 'Неверное имя поля:_check_required: %s.%s' % \
-                                            (tree_node.key, key)
+                                            (getattr(tree_node, 'key', ''), key)
             schema = self.details_schema.get(key, None)
             value = tree_node.get(db_key, None)
             if out_detail is not None and value is not None:
@@ -158,215 +106,74 @@ class IProc(ABC):
                 else:
                     if not assert_required:
                         self.log.warning('Ошибка при валидации набора %s, поле: %s',\
-                                         tree_node.key, key)
+                                         self.context['type'], key)
                         continue
                     else:
                         raise ProcException('Ошибка при валидации набора %s, поле: %s' % \
-                                            (tree_node.key, key))
-    ###################### Работа с контекстом
+                                            (self.context['type'], key))
+    ###################### Работа со строками расчета
     def _init_details(self, keys, key_d0, key_d1, tree_node, assert_required=False):
         '''Заполняет интервал из записи. Проверяет на соответствие обязательным полям.
         Разбивает интервал на подинтервалы'''
         def _intersect_details(details, item):
             '''Пересекает интервалы 2 наборов данных и в пересечении собирает атрибуты'''
             def _helper(d_item):
-                d0 = max(d_item['D_Date0'], item['D_Date0'])
-                d1 = min(d_item['D_Date1'], item['D_Date1'])
+                d0 = max(d_item['d_date0'], item['d_date0'])
+                d1 = min(d_item['d_date1'], item['d_date1'])
                 d_item.update(item)
-                d_item['D_Date0'] = d0
-                d_item['D_Date1'] = d1
+                d_item['d_date0'] = d0
+                d_item['d_date1'] = d1
 
                 return d_item
 
             # копируем массив и удаляем не пересекающиеся части
             details = [_helper(d_item.copy()) \
                        for d_item in details \
-                       if d_item['D_Date1'] > item['D_Date0'] and \
-                          item['D_Date1'] > d_item['D_Date0']]
+                       if d_item['d_date1'] > item['d_date0'] and \
+                          item['d_date1'] > d_item['d_date0']]
 
             return details
-
-        def _get_default_dates(context):
-            '''Возвращает универвальные границы интервалов расчета'''
-            return get_typed_value(context['D_Date0'], datetime), \
-                   get_typed_value(context['D_Date1'], datetime)
 
         ############### тело
         assert self.context, 'Не задан конекст выполнения операции'
         #проверяем поля. Заполняем запись
-        node_detail = t_dict()
+        node_detail = dict()
         if key_d0:
-            keys += [('D_Date0', key_d0)]
+            keys += [('d_date0', key_d0)]
         if key_d1:
-            keys += [('D_Date1', key_d1)]
+            keys += [('d_date1', key_d1)]
 
         self._check_required(tree_node, _not_null, keys, node_detail, assert_required)
 
         #обязательно заполняем поля с датами интервалов
-        if not node_detail.get('D_Date0', None):
-            node_detail['D_Date0'] = _get_default_dates(self.context)[0]
-            node_detail['N_Year'] = node_detail['D_Date0'].year
-            node_detail['N_Month'] = node_detail['D_Date0'].month
-        if not node_detail.get('D_Date1', None):
-            node_detail['D_Date1'] = _get_default_dates(self.context)[1]
+        if not node_detail.get('d_date0', None):
+            node_detail['d_date0'] = self.context['d_date0']
+            node_detail['n_year'] = node_detail['d_date0'].year
+            node_detail['n_month'] = node_detail['d_date0'].month
+        if not node_detail.get('d_date1', None):
+            node_detail['d_date1'] = self.context['d_date1']
 
         #Вставляем запись в контекст с разбиением интервалов
-        parent_details = self.context.get('parent_details', None)
+        parent_details = self.context['parent_details']
         if parent_details:
             self.context['node_details'] += _intersect_details(parent_details, node_detail)
         else:
             self.context['node_details'].append(node_detail)
         return node_detail
 
-    def init_context(self):
-        '''Конекст необходим для рекурсивоного обхода дерева с данными
-        Контекст содержит кэш элементов, который используется если дереро не сгруппировано
-        по элементам от вершины к узлам, а просто содержит иерархическое представление плоских
-        записей.
-        Контекст содержит массив строк расчета родительского узла и результат декартового
-        произведения с учетом интервалов текущего уровня потомков'''
-        #текущий тип. Используется для построения ключа кеша
-        self.context['type'] = None
-        #кеш элементов. Ключ - (тип, PK). Кеш будет глобальный в shell
-        if self.context.get('context_cache', None) is None:
-            self.context['context_cache'] = dict()
-        #Оригинальные родительские строки
-        self.context['parent_details'] = t_list()
-        #Строки после пересечения с текущим уровнем
-        self.context['node_details'] = t_list()
-        #Родитель. Нужно для восстановления контекста при выходе из узла
-        self.context['parent'] = None
-        #Текущий узел. Нужно для восстановления контекста при выходе из узла
-        self.context['node'] = None
-        #название поля с текущий первичным ключом
-        self.context['key'] = dict()
-        #Использовать общий конекст родитель-потомок
-        #Контекст проинициализирован
-        self.context['_initialized'] = True
-
-    def get_entity_PK(self, tree_node, key=None):
-        '''Получение первичного ключа записи'''
-        #Обработка с учетом схемы
-        assert isinstance(tree_node, (t_dict, JsonTree)), 'Неверный тип записи'
-        if not key:
-            if  isinstance(tree_node, JsonTree) and self.tree_schema is not None:
-                path = tree_node.path
-                path = '.' + (path.join('/') if path else '')
-                entity = self.tree_schema.query(path)
-                if entity and entity.PK:
-                    key = entity.PK[0]
-            else:
-                key = 'LINK'
-
-        pk = tree_node.get(key, None)
-        if isinstance(tree_node, JsonTree) and tree_node.key:
-            key = tree_node.key
-        else:
-            key = id(tree_node)
-        assert pk, 'Не возможно определить PK записи %s' % key
-        return (key, pk)
-
-    def restore_context(self, tree_node, pk=None, key=None):
-        '''Восстанавливает контекст по РК'''
-        if not pk:
-            pk = self.get_entity_PK(tree_node, key=key)
-        return self.context['context_cache'].get(pk, None)
-
-    def save_context(self, tree_node, key=None):
-        '''Сохраняет контекст по РК'''
-        pk = self.get_entity_PK(tree_node, key=key)
-        self.context['context_cache'][pk] = self.context
-
-    def enter_child_context(self, tree_node, common=False, key=None):
-        ''' Начало нового уровня по иерархии данных. Аналог start_map
-        common - братья разделяют общий контекст родителя
-        key - название PK сущности'''
-        assert isinstance(self.context, t_dict)
-        # каждый узел хранит свою копию контекста. Копируются только ключи справочника
-        self.context = self.context.copy()
-        if not self.context.get('_initialized', False):
-            self.init_context()
-        # Если дерево не иерархия - я структурированная плоская таблица, используем кеш,
-        # иначе сохраняем контекст в узле
-        _context = None
-        if self.use_node_cache:
-            _context = self.restore_context(tree_node, key=key)
-        else:
-            if isinstance(tree_node, JsonTree):
-                _context = tree_node.context
-            else:
-                _context = tree_node.get(self.__Context, None)
-        #Если нет записанного контекста - заново его инициализируем
-        if not _context:
-            if self.use_node_cache:
-                self.save_context(tree_node, key=key)
-            else:
-                if isinstance(tree_node, JsonTree):
-                    tree_node.context = self.context
-                else:
-                    tree_node[self.__Context] = self.context
-
-            #Запоминаем родителя для восстановления контекста
-            self.context['parent'] = self.context['node']
-            self.context['node'] = tree_node
-            self.context['common'] = common
-
-            #конекст вышестоящего узла становится узлом родителя
-            self.context['parent_details'] = self.context['node_details']
-            #Строки после пересечения с текущим уровнем
-            self.context['node_details'] = t_list()
-            # ключ
-            if key:
-                self.context['key'][id(tree_node)] = key
-            return self._New_Node
-        else:
-            # при разделяемомо контексте строки родителя наполяются строками ребенка
-            if common:
-                _context['node_details'] = self.context['node_details']
-            self.context = _context
-            return not self._New_Node
-
-    def leave_child_context(self, tree_node):
-        ''' Конец уровня по иерархии данных. Возврат наверх. Аналог end_map'''
-        assert isinstance(self.context, t_dict)
-        if not self.context.get('_initialized', False):
-            self.init_context()
-        #получаем поле с ключом
-        key = self.context['key'].get(id(tree_node), None)
-        # рассчитываем на передачу по ссылке
-        # Если дерево не иерархия - я структурированная плоская таблица, используем кеш
-        if self.use_node_cache:
-            self.context = self.restore_context(tree_node, key=key)
-        else:
-            if isinstance(tree_node, JsonTree):
-                self.context = tree_node.context
-            else:
-                self.context = tree_node[self.__Context]
-        # Теперь надо восстановить контекст родителя
-        is_new = None
-        if self.context['parent']:
-            is_new = self.enter_child_context(self.context['parent'], self.context['common'], key=key)
-        else:
-            #Что мы наделали в узел кладем родителю
-            self.context['parent_details'] = self.context['node_details']
-            self.context['node_details'] = t_list()
-
-        # освободим память
-        tree_node.context = None
-        return is_new
 
     ###################### Helpers методов расчета
     def _prepare_check_time_intervals(self, detail):
-        assert isinstance(detail, t_dict)
+        assert isinstance(detail, dict)
         #разница во времени
-        date0, date1 = detail['D_Date0'], detail['D_Date1']
+        date0, date1 = detail['d_date0'], detail['d_date1']
         t_delta = date1 - date0
-        detail['N_Days'] = t_delta.days
-        detail['N_Hours'] = int(t_delta.total_seconds()/3600)
-        if not detail['N_Month']:
-            detail['N_Month'] = date0.month
-        if not detail['N_Year']:
-            detail['N_Year'] = date0.year
+        detail['n_days'] = t_delta.days
+        detail['n_hours'] = int(t_delta.total_seconds()/3600)
+        if not detail['n_month']:
+            detail['n_month'] = date0.month
+        if not detail['n_year']:
+            detail['n_year'] = date0.year
 
     def _proc_calc_method(self, tree_node):
         '''Запуск метода расчета УП ЛС'''
@@ -393,30 +200,30 @@ class IProc(ABC):
     def _calc_cost(self, detail):
         '''Тарификация'''
         assert detail
-        self._check_required(detail, tuple, keys=['N_Cons', 'N_Days', 'N_Tariff', 'N_Precision',
-                                                  'B_Tax_Inside', 'N_Tax', 'F_Taxes'])
+        self._check_required(detail, tuple, keys=['n_cons', 'n_days', 'n_tariff', 'n_precision',
+                                                  'b_tax_inside', 'n_tax', 'f_taxes'])
         #Расчет кол-ва
-        cons = detail['N_Cons']
-        days = detail['N_Days']
+        cons = detail['n_cons']
+        days = detail['n_days']
         #начальный контекст
-        m_date0 = get_typed_value(self.context['D_Date0'], datetime)
-        m_date1 = get_typed_value(self.context['D_Date1'], datetime)
+        m_date0 = get_typed_value(self.context['d_date0'], datetime)
+        m_date1 = get_typed_value(self.context['d_date1'], datetime)
         days0 = (m_date1 - m_date0).days
 
         #Тарификация
-        precision = detail['N_Precision']
-        tariff = detail['N_Tariff']
+        precision = detail['n_precision']
+        tariff = detail['n_tariff']
         amount = round(round((cons * days / days0), precision) * tariff, 2)
-        tax = detail['N_Tax']
+        tax = detail['n_tax']
         tax_amount = 0
-        if detail['B_Tax_Inside']:
+        if detail['b_tax_inside']:
             tax_amount = round(amount / (1 + tax) * tax, 2)
         else:
             tax_amount = round(amount * tax, 2)
             amount += tax_amount
 
-        detail['N_amount'] = amount
-        detail['N_Tax_amount'] = tax_amount
+        detail['n_amount'] = amount
+        detail['n_tax_amount'] = tax_amount
 
     ###################### события расширения расчета
     @abstractmethod
@@ -427,249 +234,245 @@ class IProc(ABC):
     @abstractmethod
     def _cb_complete(self, tree_node):
         '''Конец расчета'''
+        self.context.clean_context()
         pass
 
     def _cb_error(self, tree_node, error):
         '''ошибка в гланом обработчике'''
         self.log_tree_node_error('Ошибка в главном обработчике', tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # Объекты
     @abstractmethod
     def _cb_conn_point_before(self, tree_node):
         '''Перед началом обработки объекта'''
-        return self.enter_child_context(tree_node)
+        return self.context.enter_child_context(tree_node)
 
     def _cb_conn_point_after(self, tree_node):
         '''После обработки объекта'''
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
 
     def _cb_conn_point_error(self, tree_node, error):
         '''Ошибка обработки объекта'''
         self.log_tree_node_error('Ошибка обработки объекта', tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # /Объекты
     # Точки поставки
     @abstractmethod
     def _cb_network_pts_before(self, tree_node):
         '''Перед началом обработки ТоП'''
-        return self.enter_child_context(tree_node)
+        return self.context.enter_child_context(tree_node)
 
     def _cb_network_pts_after(self, tree_node):
         '''После обработки ТоП'''
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
 
     def _cb_network_pts_error(self, tree_node, error):
         '''Ошибка обработки ТоП'''
         self.log_tree_node_error('Ошибка обработки ТоП', tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # /Точки поставки
     # Площади объекта или помещения
     @abstractmethod
     def _cb_contract_squares_before(self, tree_node):
         '''Перед началом обработки площади'''
-        return self.enter_child_context(tree_node)
+        return self.context.enter_child_context(tree_node)
 
     def _cb_contract_squares_after(self, tree_node):
         '''После обработки площади'''
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
 
     def _cb_contract_squares_error(self, tree_node, error):
         '''Ошибка обработки площади'''
         self.log_tree_node_error('Ошибка обработки площади', tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # /Площади объекта или помещения
     # Помещения
     @abstractmethod
     def _cb_conn_point_sub_before(self, tree_node):
         '''Перед началом обработки помещения объекта'''
-        return self.enter_child_context(tree_node)
+        return self.context.enter_child_context(tree_node)
 
     def _cb_conn_point_sub_after(self, tree_node):
         '''После обработки помещения объекта'''
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
 
     def _cb_conn_point_sub_error(self, tree_node, error):
         '''Ошибка обработки помещения объекта'''
         self.log_tree_node_error('Ошибка обработки помещения объекта', tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # /Помещения
     # Лицевые счета
     @abstractmethod
     def _cb_subscr_before(self, tree_node):
         '''Перед началом обработки ЛС'''
-        return self.enter_child_context(tree_node)
+        return self.context.enter_child_context(tree_node)
 
     def _cb_subscr_after(self, tree_node):
         '''После обработки ЛС'''
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
 
     def _cb_subscr_error(self, tree_node, error):
         '''Ошибка обработки ЛС'''
         self.log_tree_node_error('Ошибка обработки ЛС', tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # /Лицевые счета
     # Учетные показатели
     @abstractmethod
     def _cb_registr_pts_before(self, tree_node):
         '''Перед началом обработки УП'''
-        return self.enter_child_context(tree_node)
+        return self.context.enter_child_context(tree_node)
 
     def _cb_registr_pts_after(self, tree_node):
         '''После обработки УП'''
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
 
     def _cb_registr_pts_error(self, tree_node, error):
         '''Ошибка обработки УП'''
         self.log_tree_node_error('Ошибка обработки УП', tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # /Учетные показатели
     # Активность учетных показателей
     @abstractmethod
     def _cb_registr_pts_activity_before(self, tree_node):
         '''Перед началом обработки активности УП'''
-        return self.enter_child_context(tree_node)
+        return self.context.enter_child_context(tree_node)
 
     def _cb_registr_pts_activity_after(self, tree_node):
         '''После обработки активности УП'''
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
 
     def _cb_registr_pts_activity_error(self, tree_node, error):
         '''Ошибка обработки активности УП'''
         self.log_tree_node_error('Ошибка обработки активности УП', tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # /Активность учетных показателей
     # Тариф учетных показателей
     @abstractmethod
     def _cb_registr_pts_tariff_before(self, tree_node):
         '''Перед началом обработки тарифа УП'''
-        return self.enter_child_context(tree_node)
+        return self.context.enter_child_context(tree_node)
 
     def _cb_registr_pts_tariff_after(self, tree_node):
         '''После обработки тарифа УП'''
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
 
     def _cb_registr_pts_tariff_error(self, tree_node, error):
         '''Ошибка обработки тарифа УП'''
         self.log_tree_node_error('Ошибка обработки тарифа УП', tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # /Тариф учетных показателей
     # Метод расчета учетных показателей
     @abstractmethod
     def _cb_calc_method_before(self, tree_node):
         '''Перед началом обработки УП выбранным методом расчета'''
-        return self.enter_child_context(tree_node)
+        return self.context.enter_child_context(tree_node)
 
     def _cb_calc_method_after(self, tree_node):
         '''После обработки УП выбранным методом расчета'''
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
 
     def _cb_calc_method_error(self, tree_node, error):
         '''Ошибка обработки УП выбранным методом расчета'''
         self.log_tree_node_error('Ошибка обработки УП выбранным методом расчета',
                                  tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # /Метод расчета учетных показателей
     # Прибор учета
     @abstractmethod
     def _cb_device_before(self, tree_node):
         '''Перед началом обработки ПУ'''
-        return self.enter_child_context(tree_node)
+        return self.context.enter_child_context(tree_node)
 
     def _cb_device_after(self, tree_node):
         '''После обработки ПУ'''
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
 
     def _cb_device_error(self, tree_node, error):
         '''Ошибка обработки ПУ'''
         self.log_tree_node_error('Ошибка обработки ПУ', tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # /Прибор учета
     # Показание прибора учета
     @abstractmethod
     def _cb_meter_reading_before(self, tree_node):
         '''Перед началом обработки показания ПУ'''
-        return self.enter_child_context(tree_node)
+        return self.context.enter_child_context(tree_node)
 
     def _cb_meter_reading_after(self, tree_node):
         '''После обработки показания ПУ'''
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
 
     def _cb_meter_reading_error(self, tree_node, error):
         '''Ошибка обработки показания ПУ'''
         self.log_tree_node_error('Ошибка обработки показания ПУ', tree_node=tree_node, error=error)
-        return self.leave_child_context(tree_node)
+        return self.context.leave_child_context(tree_node)
     # / Показание прибора учета
     ######################получение данных для расчета
     def _get_root_node(self, tree_node):
         '''Получение корневого узла для обработки'''
-        assert  isinstance(tree_node, (dict, list, JsonTree)), 'Неверный тип объекта'
-        if self.start_path:
-            tree_node = tree_node.query(self.start_path)
-        if isinstance(tree_node, JsonTree) and tree_node.type == t_list:
-            return tree_node[0]
+        assert  isinstance(tree_node, (dict, list)), 'Неверный тип объекта'
         if isinstance(tree_node, list):
             return tree_node[0]
         return tree_node
 
     def _get_conn_points_list(self, tree_node):
         '''Список объектов для обработки'''
-        return self.enter_subnode(tree_node, 'SD_Conn_Points')
+        return self.context.enter_subnode(tree_node, 'sd_conn_points')
 
     def _get_conn_points_sub_list(self, tree_node):
         '''Список помещений для обработки'''
-        return self.enter_subnode(tree_node, 'SD_Conn_Points_Sub')
+        return self.context.enter_subnode(tree_node, 'sd_conn_points_sub')
 
     def _get_ed_network_pts_list(self, tree_node):
         '''Список ТоП для обработки'''
-        return self.enter_subnode(tree_node, 'ED_Network_Pts')
+        return self.context.enter_subnode(tree_node, 'ed_network_pts')
 
     def _get_subscr_list(self, tree_node):
         '''Список ЛС для обработки'''
-        return self.enter_subnode(tree_node, 'SD_Subscr')
+        return self.context.enter_subnode(tree_node, 'sd_subscr')
 
     def _get_registr_pts_list(self, tree_node):
         '''Список УП для обработки'''
-        return self.enter_subnode(tree_node, 'ED_Registr_Pts')
+        return self.context.enter_subnode(tree_node, 'ed_registr_pts')
 
     def _get_calc_methods_list(self, tree_node):
         '''Список методов расчета УП для обработки'''
-        return self.enter_subnode(tree_node, 'ED_Registr_Pts_Calc_Methods')
+        return self.context.enter_subnode(tree_node, 'ed_registr_pts_calc_methods')
 
     def _get_contract_squares_list(self, tree_node):
         '''Список площадей объекта или помещения для обработки'''
-        return self.enter_subnode(tree_node, 'SD_Contract_Squares')
+        return self.context.enter_subnode(tree_node, 'sd_contract_squares')
     def _get_registr_pts_activities_list(self, tree_node):
         '''Список активности УП для обработки'''
-        return self.enter_subnode(tree_node, 'ED_Registr_Pts_Activity')
+        return self.context.enter_subnode(tree_node, 'ed_registr_pts_activity')
     def _get_registr_pts_tariff_list(self, tree_node):
         '''Список тарифов УП для обработки'''
-        return self.enter_subnode(tree_node, 'ED_Registr_Pts_Tariff')
+        return self.context.enter_subnode(tree_node, 'ed_registr_pts_tariff')
 
     def _get_devices_list(self, tree_node):
         '''Список ПУ УП для обработки'''
-        return self.enter_subnode(tree_node, 'ED_Devices')
+        return self.context.enter_subnode(tree_node, 'ed_devices')
 
     def _get_meter_readings_list(self, tree_node):
         '''Список показаний ПУ УП для обработки'''
-        return self.enter_subnode(tree_node, 'ED_Meter_Readings')
+        return self.context.enter_subnode(tree_node, 'ed_meter_readings')
 
     @abstractmethod
     def _get_calc_method(self, detail):
         '''Получить функцию метод расчета УП'''
         return lambda *arg: None
     ####################### Тело обобщенного расчета
-    def run(self, tree_node, context, schema=None, hold_node=None):
+    def run(self, tree_node, context, hold_node=None):
         '''Запуск расчета. Передается узел для обработки, параметры'''
         #дерево для обработки
         self.tree = tree_node
+        # инициализация дат расчета
+        context['d_date0'] = get_typed_value(context.pop('d_date1'), datetime)
+        context['d_date1'] = get_typed_value(context.pop('d_date2'), datetime)
         #переменные текущего контекста
-        self.context = context
+        self.context = Context(context, self.use_node_cache)
         #id потока в котором обрабатывается расчета
         self.worker_id = threading.current_thread().ident
-        #схема данных, переданных в расчета
-        self.tree_schema = schema
-        #узел для хранения узла по подписке (чтобы не грохнул сборщик мусора в многопоточном режиме)
-        self.hold_node = hold_node
         try:
             # получение верхнего узла расчета
             tree_node = self._get_root_node(tree_node)
@@ -685,9 +488,10 @@ class IProc(ABC):
             self.tree = None
             self.context = None
             self.worker_id = None
-            self.tree_schema = None
-            self.hold_node = None
-        
+            #хранение узла по подписке (чтобы не грохнул сборщик мусора в многопоточном режиме)
+            if hold_node:
+                del hold_node
+
             return self.result
 
     def _proc_main(self, tree_node):
@@ -702,7 +506,7 @@ class IProc(ABC):
                 self._proc_conn_point(node)
                 #событие выход
                 return self._cb_conn_point_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_conn_point_error(node, error)
 
     def _proc_conn_point(self, tree_node):
@@ -717,7 +521,7 @@ class IProc(ABC):
                 self._proc_network_pts(node)
                 #событие выход
                 self._cb_network_pts_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_network_pts_error(node, error)
         #обработка площадей объекта
         for node in self._get_contract_squares_list(tree_node):
@@ -728,7 +532,7 @@ class IProc(ABC):
                 self._proc_contract_squares(node)
                 #событие выход
                 self._cb_contract_squares_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_contract_squares_error(node, error)
         #обработка помещений
         for node in self._get_conn_points_sub_list(tree_node):
@@ -739,7 +543,7 @@ class IProc(ABC):
                 self._proc_conn_point_sub(node)
                 #событие выход
                 self._cb_conn_point_sub_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_conn_point_sub_error(node, error)
 
     @abstractmethod
@@ -761,7 +565,7 @@ class IProc(ABC):
                 self._proc_contract_squares(node)
                 #событие выход
                 self._cb_contract_squares_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_contract_squares_error(node, error)
         #обработка ЛС
         for node in self._get_subscr_list(tree_node):
@@ -772,7 +576,7 @@ class IProc(ABC):
                 self._proc_subscr(node)
                 #событие выход
                 self._cb_subscr_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_subscr_error(node, error)
 
     def _proc_subscr(self, tree_node):
@@ -785,7 +589,7 @@ class IProc(ABC):
                 self._proc_registr_pts(node)
                 #событие выход
                 self._cb_registr_pts_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_registr_pts_error(node, error)
 
     def _proc_registr_pts(self, tree_node):
@@ -799,7 +603,7 @@ class IProc(ABC):
                 self._proc_registr_pts_activity(node)
                 #событие выход
                 self._cb_registr_pts_activity_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_registr_pts_activity_error(node, error)
         #обработка тарифов
         for node in self._get_registr_pts_tariff_list(tree_node):
@@ -810,7 +614,7 @@ class IProc(ABC):
                 self._proc_registr_pts_tariff(node)
                 #событие выход
                 self._cb_registr_pts_tariff_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_registr_pts_tariff_error(node, error)
         #обработка методов расчета
         for node in self._get_calc_methods_list(tree_node):
@@ -821,7 +625,7 @@ class IProc(ABC):
                 self._proc_calc_method(node)
                 #событие выход
                 self._cb_calc_method_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_calc_method_error(node, error)
 
     @abstractmethod
@@ -844,7 +648,7 @@ class IProc(ABC):
                 self._proc_device(node)
                 #событие выход
                 self._cb_device_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_device_error(node, error)
 
     def _proc_device(self, tree_node):
@@ -858,7 +662,7 @@ class IProc(ABC):
                 self._proc_meter_reading(node)
                 #событие выход
                 self._cb_meter_reading_after(node)
-            except ProcException as error:
+            except Exception as error:
                 self._cb_meter_reading_error(node, error)
     @abstractmethod
     def _proc_meter_reading(self, tree_node):

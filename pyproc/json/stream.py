@@ -36,8 +36,8 @@ class JsonStream(io.BufferedIOBase):
         if self.cursor:
             value = next(self.cursor, None)
             if value is None:
-                if hasattr(self.cursor, 'commit') and callable(self.cursor.commit):
-                    self.cursor.commit()
+#                if hasattr(self.cursor, 'commit') and callable(self.cursor.commit):
+#                    self.cursor.commit()
                 self.cursor = None
 #                self.cursor = next(self.itr_cursors, None)
 #                if self.cursor:

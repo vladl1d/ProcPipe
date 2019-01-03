@@ -6,9 +6,12 @@
 """
 import re
 import sys
-from ..core.types import t_dict, t_list
+#from ..core.types import t_dict
+from ..core.types import t_list
 
 class JsonTree():
+    t_dict = dict
+    t_list = t_list
     '''
     JSON в структурированном виде. Дерево для синтаксического разбора
     '''
@@ -16,14 +19,15 @@ class JsonTree():
         self.parent = parent
         self.key = key
         self.value = value
+        self.type = type(value)
         # Переменные для последующего разбора данных
         # Контекст узла (Интервалы).
         self.context = None
 
-    @property
-    def type(self):
-        '''Получение типа текущего элемента'''
-        return type(self.value)
+#    @property
+#    def type(self):
+#        '''Получение типа текущего элемента'''
+#        return type(self.value)
     @property
     def root(self):
         '''Получение ссылки на вершину дерева json'''
@@ -34,7 +38,7 @@ class JsonTree():
     def path(self):
         '''Возвращает путь к вершине
         '''
-        this = [self.key] if isinstance(self.value, t_dict) else None
+        this = [self.key] if self.type == JsonTree.t_dict else None
         if self.parent:
             top = self.parent.path
             if top:
@@ -42,7 +46,7 @@ class JsonTree():
 
         return this
     def __iter__(self):
-        if isinstance(self.value, (t_list, t_dict)):
+        if self.type in (JsonTree.t_list, JsonTree.t_dict):
             return iter(self.value)
         raise TypeError('Тип значения не поддерживает операцию')
 
@@ -50,18 +54,18 @@ class JsonTree():
         pass
     def get(self, index, default):
         '''обертка вокруг dict'''
-        if isinstance(self.value, (t_dict)):
+        if self.type == JsonTree.t_dict:
             if isinstance(index, str):
-                index = sys.intern(index)
+                index = sys.intern(index.lower())
             return self.value.get(index, default)
-        if isinstance(self.value, (t_list)):
+        if self.type == JsonTree.t_list:
             return default if index >= len(self.value) else self.value
         if index == 0:
             return self.value if self.value else default
 
         raise TypeError('Тип значения не поддерживает операцию')
     def __getitem__(self, index):
-        if isinstance(self.value, (t_list, t_dict)):
+        if self.type in (JsonTree.t_list, JsonTree.t_dict):
             if isinstance(index, str):
                 index = sys.intern(index)
             return self.value[index]
@@ -70,9 +74,9 @@ class JsonTree():
 
         raise TypeError('Тип значения не поддерживает операцию')
     def __setitem__(self, index, value):
-        if isinstance(self.value, (t_list, t_dict)):
+        if self.type in (JsonTree.t_list, JsonTree.t_dict):
             if isinstance(index, str):
-                index = sys.intern(index)
+                index = sys.intern(index.lower())
             self.value[index] = value
             return
         if index == 0:
@@ -81,7 +85,7 @@ class JsonTree():
 
         raise TypeError('Тип значения не поддерживает операцию')
     def __contains__(self, item):
-        if isinstance(self.value, (t_list, t_dict)):
+        if self.type in (JsonTree.t_list, JsonTree.t_dict):
             return item in self.value
 
         raise TypeError('Тип значения не поддерживает операцию')
@@ -89,14 +93,14 @@ class JsonTree():
         '''
         Обертка вокруг dict
         '''
-        if isinstance(self.value, t_dict):
+        if self.type == JsonTree.t_dict:
             return self.value.keys()
-        if isinstance(self.value, t_list):
+        if self.type == JsonTree.t_list:
             return range(len(self.value))
 
         raise TypeError('Тип значения не поддерживает операцию')
     def __len__(self):
-        if isinstance(self.value, (t_list, t_dict)):
+        if self.type in (JsonTree.t_list, JsonTree.t_dict):
             return len(self.value)
 
         raise TypeError('Тип значения не поддерживает операцию')
@@ -116,10 +120,10 @@ class JsonTree():
         def _object_value(obj):
             if isinstance(obj, JsonTree):
                 return _object_value(obj.value)
-            if isinstance(obj, t_list):
+            if isinstance(obj, JsonTree.t_list):
                 for i, value in enumerate(obj):
                     obj[i] = _object_value(value)
-            if isinstance(obj, t_dict):
+            if isinstance(obj, JsonTree.t_dict):
                 for key in obj.keys():
                     obj[key] = _object_value(obj[key])
 
@@ -155,13 +159,14 @@ class JsonTree():
             #мы наверху
             if not path:
                 return self
+            path = path.lower()
             match = re.match(JsonTree._re_root, path)
             assert match, 'Неверный формат пути'
             return self.query(path[match.span()[1]:], default, self)
         else:
             if not path:
                 return this
-            if not isinstance(this, (JsonTree, t_dict, t_list)):
+            if not isinstance(this, (JsonTree, JsonTree.t_dict, JsonTree.t_list)):
                 return default
             match = re.match(JsonTree._re_element, path)
             assert match, 'Неверный формат пути'

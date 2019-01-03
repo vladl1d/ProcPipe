@@ -10,12 +10,14 @@ Created on Sun Oct 28 06:25:49 2018
 import os
 import logging
 import pyodbc
+import threading
+import json as jsonlib
 from collections import namedtuple
 from .qgraph import QGraph
 from .qbuilder import IQueryBuilder, QueryBuilderNestedSelect
 from ..core.types import t_dict, t_list
 from ..json.stream import JsonStream
-from ..json.parser import JsonParser
+#from ..json.parser import JsonParser
 from ..util.cache import CacheHelper
 
 
@@ -122,6 +124,8 @@ class DataAdapter:
         '''Открывает соединение с БД для выполнения операций'''
         if not job_id:
             job_id = len(self.connections.keys()) + 1
+        thrd_id = threading.current_thread().ident
+        job_id += '_' + str(thrd_id)
         conn = self.connections.get(job_id, None)
         if not conn:
             conn = self._module.connect(self._dsn)
@@ -145,6 +149,8 @@ class DataAdapter:
                 print('Не смогли закрыть:', str(error))
 
         if job_id:
+            thrd_id = threading.current_thread().ident
+            job_id += '_' + str(thrd_id)
             if job_id in self.connections:
                 _close_conn(self.connections[job_id], tran_func)
                 self.connections.pop(job_id)
@@ -177,7 +183,7 @@ class DataAdapter:
         assert data_id in self.data, 'Неверный идентификатор запроса %s' % data_id
         assert 'queries' in self.data[data_id], 'Не задан ни один запрос для %s' % data_id
 
-        self.new_db_job(data_id)
+        conn_id = self.new_db_job(data_id)
         for query in self.data[data_id]['queries']:
             params = self.data[data_id]['params']
             if params:
@@ -199,7 +205,7 @@ class DataAdapter:
             exec_params = [sql]
             if param_values:
                 exec_params.append(param_values)
-            yield (self.connections[data_id].cursor().execute(*exec_params), query)
+            yield (self.connections[conn_id].cursor().execute(*exec_params), query)
 
     def push_record(self, record, data_id, param_values=None, data_field='@C_Data'):
         '''Отправляет результат на сервер.
@@ -298,24 +304,28 @@ class DataAdapter:
 
     def fetch_to_json(self, typed_cursor, encoding='utf-8'):
         '''получает данные в json-формате'''
-        parser = JsonParser(encoding=encoding)
+        def _pairs_hook(node):
+            if self.query_builder.alias_map:
+                return {self.query_builder.alias_map.get(nam.lower(), nam.lower()): val \
+                        for nam, val in node}
+            return {nam.lower(): val for nam, val in node}
+            
         cursor, schema = next(typed_cursor, (None, None))
-        json = None
+        json = dict()
         while cursor is not None:
-            #ищем data_id
             fin = JsonStream(cursor, encoding=encoding, \
-                        get_value_cb=(lambda x: str(x[0]).encode(encoding) if x else None))
+                        get_value_cb=(lambda x: str(x[0]) if x else None))
 
-            res = parser.parse(fin, alias_map=self.query_builder.alias_map, schema=schema, \
-                               append_to=json)
-            if res:
-                json = parser.json
+            js = jsonlib.load(fin, object_pairs_hook=_pairs_hook)
+            if js:
+                if isinstance(js, list):
+                    js = {getattr(schema, 'name', '_').replace('.', '_'): js}
+                json.update(js)
                 cursor, schema = next(typed_cursor, (None, None))
             else:
                 break
         #не пропускаем гавно
-        assert res
-        return json.json()
+        return json
 
     @staticmethod
     def write_output(cursor, output, headers=False, delim=';'):

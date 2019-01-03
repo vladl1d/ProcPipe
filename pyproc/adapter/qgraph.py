@@ -209,14 +209,14 @@ class QGraph():
 
         self.validated = True
 
-    _re_root = re.compile(r'^\.')
-    _re_element = re.compile(r'^(/([\w|*]+))|(\[(\d+)\])')
+    _re_root = re.compile(r'^\$')
+    _re_element = re.compile(r'^(\.([\w|*]+))|(\[(\d+)\])')
     
     def query(self, path, default=None, this=None):
         '''возвращает элемент по заданному пути
         <query> = <query_root><selector>
-        <query_root> = .
-        <selector> = /<element_name><selector> | [<index>]<selector> | $
+        <query_root> = \$
+        <selector> = .<element_name><selector> | [<index>]<selector> | $
         <selector> = string literal
         <index> = int
         '''
@@ -242,7 +242,6 @@ class QGraph():
             match = re.match(QGraph._re_root, path)
             assert match, 'Неверный формат пути'
             entity = self.query(path[match.span()[1]:], default, self)
-            self._query_paths[path] = entity
             return entity
         else:
             if not path:
@@ -255,7 +254,22 @@ class QGraph():
                 key = match.group(2) if match.group(2) else int(match.group(4))
                 return self.query(path[match.span()[1]:], default, _get(this, key, default))
 
+    def traverse_query_paths(self):
+        '''Формирование кеша'''
+        schema_map = dict()
 
+        def _traverse_query_paths(enitity, path=None, name=None):
+            if not path:
+                path = '$'
+    
+            name = name.lower() if name else enitity.name.lower()
+            path += '.%s' % name
+            schema_map[path] = enitity
+            for ent in enitity.subnodes:
+                _traverse_query_paths(enitity.subnodes[ent], path=path, name=ent)
+
+        _traverse_query_paths(self)
+        return schema_map
 ##################################################################################################
 class QGraphHelper:
     '''helper-класс для разбора и валидации сущностей. Сделан в целях тестирования'''

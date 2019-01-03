@@ -61,7 +61,7 @@ def main(*args):
         base_dir = __BASE_DIR
     #/параметры
     #инициализируем shell
-    shell = ProcShell(ini_file=ini_file, base_dir=base_dir, debug=False)#debug)
+    shell = ProcShell(ini_file=ini_file, base_dir=base_dir, debug=True)#debug)
 #    reader = None
 #    reader = shell._data_adapter.fetch_to_dict
     #rec = shell._get_record('APP_Fetch_Next_Batch', {'@Node_id':1})#, reader)
@@ -80,7 +80,7 @@ def main(*args):
 #    param_values = {'@id':389572, '@batch':0}
 #    shell._new_job(param_values)
     shell.stop()
-    return 1
+    return 0
 
 
 ######################################################################################

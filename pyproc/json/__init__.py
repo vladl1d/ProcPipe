@@ -6,8 +6,8 @@
 	* json-парсер (восстановление структуры из текста)
 """
 
-__all__ = ['JsonParser', 'JsonStream', 'JsonTree']
+__all__ = ['JsonStream']
 
-from .parser import JsonParser
+#from .parser import JsonParser
 from .stream import JsonStream
-from .tree import JsonTree
+#from .tree import JsonTree
