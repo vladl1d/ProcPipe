@@ -96,19 +96,19 @@ class Context():
 
             return subnode
 
+    def get_entity(self):
+        if self.context['schema']:
+            entity = self.context['schema_map'].get(self.path, None)
+            return entity if entity is not None else self.context['schema'].query(self.path)
     def get_entity_PK(self, tree_node, key=None):
         '''Получение первичного ключа записи'''
         #Обработка с учетом схемы
         assert isinstance(tree_node, dict), 'Неверный тип записи'
         entity, key = None, None
         if not key:
-            if self.context['schema']:
-#                path = tree_node.path
-#                path = '.' + ('/'.join(path) if path else '')
-                entity = self.context['schema_map'].setdefault(self.context['path'], \
-                                     self.context['schema'].query(self.context['path']))
-                if entity and entity.PK:
-                    key = entity.PK[0]
+            entity = self.get_entity()
+            if entity and entity.PK:
+                key = entity.PK[0]
             else:
                 key = 'link'
 
@@ -208,6 +208,15 @@ class Context():
         '''Убирает следы'''
         for itm in ['path', 'type', 'parent_details', 'node_details', 'parent', 'node', 'key']:
             self.context.pop(itm, None)
+
+    def get_dict_record(self, entity_name, key):
+        '''Получает из кеша запись справочника если она есть'''
+        if not self.context.get('dict_map', None):
+            return None
+        dict_map = self.context['dict_map']
+        entity_name = str(entity_name).lower()
+        return dict_map.get('%s#%s' % (entity_name, str(key)), None)
+
     def __getitem__(self, index):
         return self.context.get(index, None)
     def __setitem__(self, index, value):

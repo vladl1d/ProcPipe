@@ -13,8 +13,25 @@
         "cols": ["LINK", "C_Name"],
         "filter": "@.LINK = @F_Division",
 
+        "FS_Tariff":{
+                "sql":"PY.PF_FS_Tariffs(@id, @batch)",
+                "ref":{"left":"LINK", "right":"F_Division"},
+                "cols": ["LINK", "F_Energy_Levels", "F_Units","F_Sale_Accounts_1", "F_Taxes", "B_Tax_Inside"],
+
+                "FS_Tax_History":{
+                        "ref":{"left":"F_Taxes", "right":"F_Taxes"},
+                        "cols": ["N_Value", "D_Date_Begin", "D_Date_End"],
+                        "filter": "@.D_Date_Begin<@D_Date1 AND (@.D_Date_End IS NULL OR @.D_Date_End>@D_Date0)"
+                        },
+
+                "FS_Tariff_History": {
+                        "cols": ["F_Time_Zones", "F_Cons_Zones", "F_Sale_Accounts_1", "D_Date_Begin", "D_Date_End", "N_Tariff", "B_Default"],
+                        "filter": "@.D_Date_Begin<@D_Date1 AND @.D_Date_End>@D_Date0"
+                        }
+                },
+
         "SD_Conn_Points": {
-        "sql":"PY.PF_SD_Conn_Points(@id, @batch)",
+            "sql":"PY.PF_SD_Conn_Points(@id, @batch)",
             "ref":{"left":"LINK", "right":"F_Division"},
             "cols": ["LINK", "N_PaymentDay","F_Conn_Types", "F_Conn_Status_Types"],
 
@@ -43,10 +60,7 @@
                         },
 
                         "ED_Registr_Pts_Tariff": {
-                            "cols": [
-                                "D_Date", "D_Date_End",
-                                { "F_Tariff": {["LINK", "F_Energy_Levels", "F_Units", "F_Units_2", "F_Sale_Accounts_1", "F_Sale_Accounts_2", "F_Taxes"] }
-                            ],
+                            "cols": ["D_Date", "D_Date_End", "F_Tariff"],
                             "filter": "@.D_Date<@D_Date1 AND @.D_Date_End>@D_Date0"
                         },
 

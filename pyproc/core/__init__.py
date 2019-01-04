@@ -7,10 +7,11 @@
 """
 
 __all__ = ['ShellLogHandler', 'ProcShell', 'Poller', 'Job', 'PollError', 'ProcResult', 
-           't_dict', 't_list']
+           't_dict', 't_list', 'IShell']
 
 from .log import ShellLogHandler
 from .shell import ProcShell
 from .poller import Poller, Job, PollError
 from .results import ProcResult
 from .types import t_dict, t_list
+from .ishell import IShell

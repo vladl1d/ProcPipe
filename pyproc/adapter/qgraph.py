@@ -7,6 +7,7 @@ Created on Fri Dec 21 08:52:08 2018
 #from __future__ import unicode_literals
 #from __future__ import print_function as _print
 import re
+import sys
 from ..core.types import t_dict
 
 class QGraph():
@@ -362,8 +363,11 @@ class QGraphHelper:
     def check_columns_existance(name, schema, col_names, crs):
         '''Проверяет наличие колонок из конфигурации в схеме БД
         '''
-        cols = list(filter(lambda x: x in set(col_names), \
-                      [r.column_name for r in crs.columns(table=name, schema=schema)]))
+        cols = crs.columns(table=sys.intern(name), schema=schema).fetchall()
+        if not cols:
+            return
+        cols = list(filter(lambda x: x.lower() in set(map(str.lower, col_names)), \
+                      [r.column_name for r in cols]))
         delta = set(col_names) - set(cols)
         assert len(delta) == 0, name + ': Не смогли разрешить имя колонок %s' % ','.join(delta)
 

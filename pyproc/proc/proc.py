@@ -38,8 +38,6 @@ class IProc(ABC):
         self.worker_id = None
         # лог для актирования событий расчет
         self.log = shell.log
-        # кеш справочниов
-        self.dict_cache = shell.dict_cache
         # список результатов расчета
         self._details = list()
         # режим обхода дерева. Ожидаем братских узлов с тем же PK или нет. Если да - кешируем
@@ -86,12 +84,12 @@ class IProc(ABC):
             keys = tree_node.keys()
         for key in keys:
             if isinstance(key, tuple):
-                db_key = key[1]
-                key = key[0]
+                db_key = key[1].lower()
+                key = key[0].lower()
             else:
-                db_key = key
+                db_key = key.lower()
             assert key in self.details_schema, 'Неверное имя поля:_check_required: %s.%s' % \
-                                            (getattr(tree_node, 'key', ''), key)
+                                            (self.context.type, key)
             schema = self.details_schema.get(key, None)
             value = tree_node.get(db_key, None)
             if out_detail is not None and value is not None:
@@ -192,7 +190,7 @@ class IProc(ABC):
             self._check_required(detail, _calc)
 
             #тарификация
-            #self._calc_cost(detail)
+            self._calc_cost(detail)
 
             #проталкивание результата
             self._push_result(detail)
@@ -484,6 +482,7 @@ class IProc(ABC):
             self._cb_complete(tree_node)
         except Exception as error:
             self._cb_error(tree_node, error)
+            self.result.clear()
         finally:
             self.tree = None
             self.context = None

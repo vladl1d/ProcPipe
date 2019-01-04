@@ -9,7 +9,7 @@ Created on Sun Oct 28 06:25:49 2018
 #import sys
 import os
 import logging
-import pyodbc
+#import pyodbc
 import threading
 import json as jsonlib
 from collections import namedtuple
@@ -19,7 +19,6 @@ from ..core.types import t_dict, t_list
 from ..json.stream import JsonStream
 #from ..json.parser import JsonParser
 from ..util.cache import CacheHelper
-
 
 
 #import collections as c
@@ -35,7 +34,7 @@ class DataAdapter:
     _DEPENDS = {
             'QGraph[]' : ['../pyproc/adapter/qgrapth.py1', lambda s, d='.': '%s/%s.py' %(d, s)]
             }
-    def __init__(self, dsn, config, module=pyodbc, base_dir=None, log=None, debug=False,
+    def __init__(self, dsn, config, module, base_dir=None, log=None, debug=False,
                  query_builder=QueryBuilderNestedSelect(shrink_names=False, sql_lang=None)):
         '''
         Стандартный конструктор
@@ -99,15 +98,15 @@ class DataAdapter:
             queries = self.cache.pick_data('QGraph[]', data['id'])
             if not queries:
                 #разбор запросов
-                self.new_db_job('QGraph[]')
+                job_id = self.new_db_job('QGraph[]')
                 queries = []
                 for key in (data.keys() - DataAdapter._DATA_TAGS):
                     if key == 'query':
                         entity = QGraph.parse_conf_node(data[key])
-                        entity.validate(self.connections['QGraph[]'])
+                        entity.validate(self.connections[job_id])
                     else:
                         entity = QGraph.parse_conf_node(data[key], name=key)
-                        entity.validate(self.connections['QGraph[]'])
+                        entity.validate(self.connections[job_id])
 
                     queries.append(entity)
 
@@ -156,8 +155,8 @@ class DataAdapter:
                 self.connections.pop(job_id)
                 print('Закрыли запрос:', job_id)
         else:
-            for conn in self.connections:
-                _close_conn(conn, tran_func)
+            for job_id in self.connections:
+                _close_conn(self.connections[job_id], tran_func)
 
     def commit_db_job(self, job_id=None):
         '''Закрывает операцию с применением результата'''
@@ -267,7 +266,7 @@ class DataAdapter:
                 #убеждаемся что запрос все же закрыли
                 self.commit_db_job(data_id)
                 self.log.exception('Ошибка выполнения запроса к БД')
-                
+
         else:
             self.log.error('Не найден источник данных с id = %s', data_id)
         return None
@@ -302,14 +301,14 @@ class DataAdapter:
             cursor, schema = next(typed_cursor, (None, None))
         return result
 
-    def fetch_to_json(self, typed_cursor, encoding='utf-8'):
+    def fetch_to_json(self, typed_cursor, encoding='utf-8', hook=None):
         '''получает данные в json-формате'''
         def _pairs_hook(node):
             if self.query_builder.alias_map:
                 return {self.query_builder.alias_map.get(nam.lower(), nam.lower()): val \
                         for nam, val in node}
             return {nam.lower(): val for nam, val in node}
-            
+
         cursor, schema = next(typed_cursor, (None, None))
         json = dict()
         while cursor is not None:
@@ -320,6 +319,8 @@ class DataAdapter:
             if js:
                 if isinstance(js, list):
                     js = {getattr(schema, 'name', '_').replace('.', '_'): js}
+                if callable(hook):
+                    hook(js, schema)
                 json.update(js)
                 cursor, schema = next(typed_cursor, (None, None))
             else:

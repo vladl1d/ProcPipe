@@ -8,8 +8,7 @@ from uuid import UUID
 from datetime import datetime
 #from ..core.types import t_dict, t_list
 from .proc import IProc
-from .types import _null, _not_null, _calc
-from .util import get_record_by_key
+from .types import ProcException, _null, _not_null, _calc
 
 class ProcCR(IProc):
     '''
@@ -33,9 +32,10 @@ class ProcCR(IProc):
         'f_tariff':          _not_null((int,)),
         'f_norms':           _null((int,)),
         'f_time_zones':      _null((int,)),
-        'f_conn_points':     _not_null((UUID,)),
-        'f_conn_points_sub': _not_null((UUID,)),
-        'f_network_pts':     _not_null((UUID,)),
+        'f_cons_zones':      _null((int,)),
+        'f_conn_points':     _not_null((str,)),
+        'f_conn_points_sub': _not_null((str,)),
+        'f_network_pts':     _not_null((str,)),
         'f_prop_forms':      _null((int,)),
         'd_date0':           _not_null((datetime,)),
         'd_date1':           _null((datetime,)),
@@ -51,7 +51,9 @@ class ProcCR(IProc):
         'n_hours':           _calc((int,)),
         'n_month':           _calc((int,)),
         'n_year':            _calc((int,)),
-        #'n_tariff':          _not_null((float,)),
+        'n_tariff':          _not_null((float,)),
+        'n_tax':             _not_null((float,)),
+        'b_tax_inside':      _not_null((bool, 1)),
         'f_sale_accounts_1': _null((int,)),
         'f_taxes':           _not_null((int,)),
         'n_amount':          _calc((float,)),
@@ -75,11 +77,15 @@ class ProcCR(IProc):
     def _cb_init(self, tree_node):
         '''Запуск расчета'''
         # проверка кеша
-        assert isinstance(self.dict_cache, dict) and 'fs_sale_items' in self.dict_cache, \
-                'Кеш не проинициализирован'
+        assert isinstance(self.context['dict_map'], dict), 'Кеш не проинициализирован'
         #вход в корневой узел
         if self.context.enter_child_context(tree_node, key='sd_division') == self.context.NEW:
             self._init_details([('f_division', 'link')], None, None, tree_node)
+        # обработка тарифов
+        tariffs = self.context.enter_subnode(tree_node, 'fs_tariff')
+        entity = self.context.get_entity()
+        if tariffs and entity:
+            self._shell.dict_hook({'fs_tariff': tariffs}, entity)
 
     def _cb_complete(self, tree_node):
         '''Конец расчета'''
@@ -92,6 +98,7 @@ class ProcCR(IProc):
 
     def _cb_conn_point_before(self, tree_node):
         '''Перед началом обработки объекта'''
+        # обработка объекта
         if self.context.enter_child_context(tree_node) == self.context.NEW:
             self._init_details([('f_conn_points', 'link')], None, None, tree_node)
 
@@ -120,11 +127,18 @@ class ProcCR(IProc):
             self._init_details([('f_registr_pts', 'link'), 'f_network_pts', 'f_sale_items',
                                 'f_balance_types', 'f_energy_levels'],
                                 'd_date_begin', 'd_date_end', tree_node)
-        sub_node = get_record_by_key(self.dict_cache['fs_sale_items'], 'link', \
-                                     tree_node['f_sale_items'])
-#        sub_node = self.context.enter_subnode(tree_node, 'fs_sale_items')
-#        if isinstance(sub_node, list):
-#            sub_node = sub_node[0]
+
+        # получаем услугу
+        subnode_name = 'fs_sale_items'
+        sub_node = self.context.get_dict_record('fs_sale_items', tree_node['f_sale_items'])
+        if not sub_node:
+            raise ProcException('Не найдена услуга: %s', tree_node['f_tariff'])
+        # перед началом действий сохраняем в текуший контекст
+        self.context['path'] = self.context.path
+        self.context['type'] = self.context.type
+        self.context.path += '.' + subnode_name
+        self.context.type = subnode_name
+
         if self.context.enter_child_context(sub_node, common=True) == self.context.NEW:
             self._init_details(['f_units', 'n_precision', ('c_sale_items', 'c_const')],
                                None, None, sub_node)
@@ -139,11 +153,33 @@ class ProcCR(IProc):
         '''Перед началом обработки тарифа УП'''
         if self.context.enter_child_context(tree_node, common=True) == self.context.NEW:
             self._init_details(['f_tariff'], 'd_date', 'd_date_end', tree_node)
-        sub_node = self.context.enter_subnode(tree_node, 'fs_tariff')
-        if isinstance(sub_node, list):
-            sub_node = sub_node[0]
+        # получаем тариф
+        subnode_name = 'fs_tariff'
+        sub_node = self.context.get_dict_record(subnode_name, tree_node['f_tariff'])
+        if not sub_node:
+            raise ProcException('Не найден тариф: %s', tree_node['f_tariff'])
+        # перед началом действий сохраняем в текуший контекст
+        self.context['path'] = self.context.path
+        self.context['type'] = self.context.type
+        self.context.path += '.' + subnode_name
+        self.context.type = subnode_name
+
         if self.context.enter_child_context(sub_node, common=True) == self.context.NEW:
-            self._init_details(['f_units', 'f_taxes', 'f_sale_accounts_1'], None, None, sub_node)
+            self._init_details(['f_units', 'f_taxes', 'f_sale_accounts_1', 'f_energy_levels', \
+                                'b_tax_inside'], None, None, sub_node)
+            # история тарифа
+            for node in self.context.enter_subnode(sub_node, 'fs_tariff_history'):
+                if self.context.enter_child_context(node, common=True) == self.context.NEW:
+                    self._init_details(['f_time_zones', 'f_cons_zones', 'f_sale_accounts_1', 'n_tariff'], \
+                                       'd_date_begin', 'd_date_end', node)
+                self.context.leave_child_context(node)
+            # /
+            # история НДС
+            for node in self.context.enter_subnode(sub_node, 'fs_tax_history'):
+                if self.context.enter_child_context(node, common=True) == self.context.NEW:
+                    self._init_details([('n_tax', 'n_value')], 'd_date_begin', 'd_date_end', node)
+                self.context.leave_child_context(node)
+            # /
         self.context.leave_child_context(sub_node)
 
     def _cb_calc_method_before(self, tree_node):
